@@ -12,7 +12,7 @@ CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 line_bot_api = LineBotApi("zC1XczgR3zSaFD4wdms2ZSit+5jcxebiwOSDwMwNsYQE2dIEvku3qjWtmmCs1sx+iIz8DfvfMQj/fVy1O7fxNoBRdTpFQXTTXgcmtfeXsm0VQqxXoBmQ83yhVjZD6T25xuMWDpBvTHTUBPxGyueiiAdB04t89/1O/w1cDnyilFU=")
 handler = WebhookHandler("dcd96b6b8d8659d088ae1e5c216c633b")
 
-app = Flask(_name_)
+app = Flask(__name__)
 
 DB_PATH = "groups.db"
 
