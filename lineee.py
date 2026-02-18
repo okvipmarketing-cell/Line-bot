@@ -129,10 +129,10 @@ def handle_message(event):
         save_group_id(src.group_id)
 
         # คำสั่ง register (ไม่จำเป็นแต่ช่วยให้ทีมรู้ว่าเก็บแล้ว)
-        if event.message.text.strip().lower() == "OKVIP":
+        if event.message.text.strip().lower() == "okvip":
             line_bot_api.reply_message(
                 event.reply_token,
-                TextSendMessage(text="บันทึกกลุ่มเรียบร้อย ✅")
+                TextSendMessage(text="群ID已保存✅")
             )
 
 
