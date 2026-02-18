@@ -92,6 +92,6 @@ def send_to_all_groups(text: str):
         line_bot_api.push_message(gid, TextSendMessage(text=text))
 
 if __name__ == "__main__":
-    import os
+    init_db()   # <<<<< เพิ่มบรรทัดนี้
     port = int(os.environ.get("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
