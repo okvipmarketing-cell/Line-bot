@@ -3,17 +3,20 @@ import sqlite3
 from flask import Flask, request, abort
 
 from linebot import LineBotApi, WebhookHandler
-from linebot.exceptions import InvalidSignatureError
+from linebot.exceptions import InvalidSignatureError, LineBotApiError
 from linebot.models import MessageEvent, TextMessage, TextSendMessage, JoinEvent
 
+# ===== CONFIG (ENV only) =====
 CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
 CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 
-line_bot_api = LineBotApi("zC1XczgR3zSaFD4wdms2ZSit+5jcxebiwOSDwMwNsYQE2dIEvku3qjWtmmCs1sx+iIz8DfvfMQj/fVy1O7fxNoBRdTpFQXTTXgcmtfeXsm0VQqxXoBmQ83yhVjZD6T25xuMWDpBvTHTUBPxGyueiiAdB04t89/1O/w1cDnyilFU=")
-handler = WebhookHandler("dcd96b6b8d8659d088ae1e5c216c633b")
+if not CHANNEL_ACCESS_TOKEN or not CHANNEL_SECRET:
+    raise RuntimeError("Missing LINE_CHANNEL_ACCESS_TOKEN / LINE_CHANNEL_SECRET in env.")
+
+line_bot_api = LineBotApi("hh8diWyijb6Z17Yjlr5yN5jeT3M5VGGqj5mXsJK4ELLb2QGlGkR99VtiwlLM3TA/iIz8DfvfMQj/fVy1O7fxNoBRdTpFQXTTXgcmtfeXsm0LE3PFCtGpfXpsAmOKT/+9a07ABnoqfGzcIpuU1qqmqgdB04t89/1O/w1cDnyilFU=")
+handler = WebhookHandler("fc551ae7c642a0046b7b4e1cab7b569c")
 
 app = Flask(__name__)
-
 DB_PATH = "groups.db"
 
 def init_db():
@@ -37,61 +40,101 @@ def list_group_ids():
         rows = conn.execute("SELECT group_id FROM groups").fetchall()
     return [r[0] for r in rows]
 
-@app.route("/callback", methods=["POST"])
+@app.route("/", methods=["GET"])
+def home():
+    return "OK", 200
+
+@app.route("/callback", methods=["GET", "POST"])
 def callback():
+    if request.method == "GET":
+        return "callback alive", 200
+
     signature = request.headers.get("X-Line-Signature", "")
     body = request.get_data(as_text=True)
+
+    print("=== WEBHOOK IN ===")
+    print(body)
 
     try:
         handler.handle(body, signature)
     except InvalidSignatureError:
+        print("InvalidSignatureError: secret ไม่ตรง หรือคนละ channel")
         abort(400)
+    except Exception as e:
+        print("Unexpected error:", repr(e))
+        abort(500)
 
-    return "OK"
+    return "OK", 200
 
-# 1) ตอนบอทถูกเชิญเข้ากลุ่ม จะมี JoinEvent (บางกรณี)
 @handler.add(JoinEvent)
 def handle_join(event):
-    # event.source.group_id จะมีใน group
     if hasattr(event.source, "group_id") and event.source.group_id:
-        save_group_id(event.source.group_id)
+        gid = event.source.group_id
+        save_group_id(gid)
+        print("Saved group_id from JoinEvent:", gid)
 
-# 2) ตอนมีคนพิมพ์ในกลุ่ม เราจะเก็บ groupId ได้แน่นอน
 @handler.add(MessageEvent, message=TextMessage)
 def handle_message(event):
+    text = (event.message.text or "").strip()
     src = event.source
 
-    # เก็บ group_id ถ้ามาจากกลุ่ม
+    # group chat
     if hasattr(src, "group_id") and src.group_id:
-        save_group_id(src.group_id)
+        gid = src.group_id
+        save_group_id(gid)
+        print("Saved group_id from MessageEvent:", gid)
 
-        # คำสั่งแอดมินง่ายๆ: พิมพ์ "register"
-        if event.message.text.strip().lower() == "lineokvip":
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text="บันทึกกลุ่มเรียบร้อย ✅")
-            )
+        if text.lower() == "lineokvip":
+            try:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="บันทึกกลุ่มเรียบร้อย ✅")
+                )
+            except LineBotApiError as e:
+                print("Reply error:", e.status_code, e.error.message)
             return
 
-        # คำสั่ง broadcast จากในแชท (ตัวอย่าง)
-        if event.message.text.startswith("sendall "):
-            msg = event.message.text[len("sendall "):].strip()
+        if text.lower().startswith("sendall "):
+            msg = text[len("sendall "):].strip()
             send_to_all_groups(msg)
-            line_bot_api.reply_message(
-                event.reply_token,
-                TextSendMessage(text=f"ส่งไปทุกกลุ่มที่บันทึกไว้แล้ว ✅")
-            )
+            try:
+                line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(text="ส่งไปทุกกลุ่มที่บันทึกไว้แล้ว ✅")
+                )
+            except LineBotApiError as e:
+                print("Reply error:", e.status_code, e.error.message)
             return
 
-    # ถ้าไม่ใช่กลุ่ม ก็ทำอย่างอื่นได้ (ข้ามไปก่อน)
+        # เทสให้รู้ว่าบอทตอบได้จริง
+        try:
+            line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text=f"รับข้อความแล้ว ✅: {text}")
+            )
+        except LineBotApiError as e:
+            print("Reply error:", e.status_code, e.error.message)
+        return
+
+    # private chat
+    try:
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="บอทออนไลน์แล้ว ✅\nเชิญเข้ากลุ่ม แล้วพิมพ์: lineokvip")
+        )
+    except LineBotApiError as e:
+        print("Reply error:", e.status_code, e.error.message)
 
 def send_to_all_groups(text: str):
     group_ids = list_group_ids()
+    print("Broadcast groups:", group_ids)
     for gid in group_ids:
-        # push_message ส่งไป groupId ได้ ถ้าบอทอยู่ในกลุ่มนั้น
-        line_bot_api.push_message(gid, TextSendMessage(text=text))
+        try:
+            line_bot_api.push_message(gid, TextSendMessage(text=text))
+        except LineBotApiError as e:
+            print("Push error:", gid, e.status_code, e.error.message)
 
 if __name__ == "__main__":
-    import os
+    init_db()
     port = int(os.environ.get("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
