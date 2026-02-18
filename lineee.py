@@ -91,7 +91,7 @@ def send_to_all_groups(text: str):
         # push_message ส่งไป groupId ได้ ถ้าบอทอยู่ในกลุ่มนั้น
         line_bot_api.push_message(gid, TextSendMessage(text=text))
 
-if name == "__main__":
+if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 8000))
     app.run(host="0.0.0.0", port=port)
